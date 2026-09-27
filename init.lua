@@ -69,9 +69,10 @@ minetest.register_entity("mine_test_ball_pit:ball_entity", {
 
         -- Tiny random velocity upon spawn if it's new (staticdata == "")
         if staticdata == "" then
-            local rx = (math.random() - 0.5) * 1.5
-            local rz = (math.random() - 0.5) * 1.5
-            self.object:set_velocity({x = rx, y = 1.0, z = rz})
+            local rx = (math.random() - 0.5) * 4.0
+            local ry = math.random() * 4.0 + 3.0
+            local rz = (math.random() - 0.5) * 4.0
+            self.object:set_velocity({x = rx, y = ry, z = rz})
         end
     end,
 
@@ -84,6 +85,9 @@ minetest.register_entity("mine_test_ball_pit:ball_entity", {
         local vel = self.object:get_velocity()
         if not vel then return end
 
+        local pos = self.object:get_pos()
+        if not pos then return end
+
         if not self._last_vel then
             self._last_vel = vel
             return
@@ -92,6 +96,29 @@ minetest.register_entity("mine_test_ball_pit:ball_entity", {
         local new_vel = {x = vel.x, y = vel.y, z = vel.z}
         local bounced = false
         local restitution = 0.6 -- How bouncy they are
+
+        -- Player/Mob Repulsion (Diving Effect)
+        local objs = minetest.get_objects_inside_radius(pos, 1.5)
+        for _, obj in ipairs(objs) do
+            if obj ~= self.object then
+                -- Check if object is a player or a mob (basic entity that isn't a ball)
+                local lua_ent = obj:get_luaentity()
+                local is_player = obj:is_player()
+                local is_mob = lua_ent and lua_ent.name ~= "mine_test_ball_pit:ball_entity"
+
+                if is_player or is_mob then
+                    local opos = obj:get_pos()
+                    if opos then
+                        local dx = pos.x - opos.x
+                        local dz = pos.z - opos.z
+                        -- Apply a small push away from the object
+                        new_vel.x = new_vel.x + dx * 2.0 * dtime
+                        new_vel.z = new_vel.z + dz * 2.0 * dtime
+                        bounced = true
+                    end
+                end
+            end
+        end
 
         -- If suddenly stopped falling, bounce upwards
         if self._last_vel.y < -0.5 and math.abs(vel.y) < 0.1 then
@@ -119,6 +146,27 @@ minetest.register_entity("mine_test_ball_pit:ball_entity", {
             if vel.x ~= new_vel.x or vel.z ~= new_vel.z then
                 bounced = true
             end
+        end
+
+        -- Water Physics (Swimming/Floating)
+        local node = minetest.get_node(pos)
+        local in_liquid = false
+        if node and minetest.registered_nodes[node.name] then
+            local def = minetest.registered_nodes[node.name]
+            if def.liquidtype and def.liquidtype ~= "none" then
+                in_liquid = true
+            end
+        end
+
+        if in_liquid then
+            self.object:set_acceleration({x = 0, y = 1.0, z = 0})
+            -- Dampening drag effect in water
+            new_vel.x = new_vel.x * 0.9
+            new_vel.y = new_vel.y * 0.9
+            new_vel.z = new_vel.z * 0.9
+            bounced = true -- force velocity update
+        else
+            self.object:set_acceleration({x = 0, y = -3.0, z = 0})
         end
 
         if bounced then

@@ -109,9 +109,8 @@ minetest.register_entity("mine_test_ball_pit:ball_entity", {
                 local lua_ent = obj:get_luaentity()
                 local is_player = obj:is_player()
                 local is_mob = lua_ent and lua_ent.name ~= "mine_test_ball_pit:ball_entity"
-                local is_ball = lua_ent and lua_ent.name == "mine_test_ball_pit:ball_entity"
 
-                if is_player or is_mob or is_ball then
+                if is_player or is_mob then
                     local opos = obj:get_pos()
                     if opos then
                         local dx = pos.x - opos.x

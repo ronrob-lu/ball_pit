@@ -37,7 +37,7 @@ minetest.register_entity("mine_test_ball_pit:ball_entity", {
         mesh = "ball.obj",
         visual_size = {x = 0.25, y = 0.25, z = 0.25},
         textures = {"ball_base.png"},
-        hp_max = 1,
+        hp_max = 10,
         makes_footstep_sound = false,
         static_save = true,
     },
@@ -48,6 +48,7 @@ minetest.register_entity("mine_test_ball_pit:ball_entity", {
 
         -- Set random color and age if none is saved
         self.age = 0
+        self.water_damage_timer = 0
         if not self._color_idx then
             if staticdata and staticdata ~= "" then
                 -- Try deserializing as a table for backward compatibility
@@ -55,6 +56,7 @@ minetest.register_entity("mine_test_ball_pit:ball_entity", {
                 if type(data) == "table" then
                     self._color_idx = data.color_idx
                     self.age = data.age or 0
+                    self.water_damage_timer = data.water_damage_timer or 0
                 else
                     self._color_idx = tonumber(staticdata)
                 end
@@ -78,7 +80,7 @@ minetest.register_entity("mine_test_ball_pit:ball_entity", {
         -- Tiny random velocity upon spawn if it's new (staticdata == "")
         if staticdata == "" then
             local rx = (math.random() - 0.5) * 4.0
-            local ry = math.random() * 4.0 + 3.0
+            local ry = 0
             local rz = (math.random() - 0.5) * 4.0
             self.object:set_velocity({x = rx, y = ry, z = rz})
         end
@@ -87,7 +89,8 @@ minetest.register_entity("mine_test_ball_pit:ball_entity", {
     get_staticdata = function(self)
         return minetest.serialize({
             color_idx = self._color_idx or 1,
-            age = self.age or 0
+            age = self.age or 0,
+            water_damage_timer = self.water_damage_timer or 0
         })
     end,
 
@@ -203,9 +206,16 @@ minetest.register_entity("mine_test_ball_pit:ball_entity", {
         if in_liquid then
             if self.age > 600 then
                 self.object:set_acceleration({x = 0, y = -1.0, z = 0})
-                if pos.y < -10 then
-                    self.object:remove()
-                    return
+                self.water_damage_timer = (self.water_damage_timer or 0) + dtime
+                if self.water_damage_timer >= 1.0 then
+                    local hp = self.object:get_hp()
+                    if hp <= 1 then
+                        self.object:remove()
+                        return
+                    else
+                        self.object:set_hp(hp - 1)
+                    end
+                    self.water_damage_timer = 0
                 end
             else
                 self.object:set_acceleration({x = 0, y = 1.0, z = 0})

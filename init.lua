@@ -46,10 +46,18 @@ minetest.register_entity("mine_test_ball_pit:ball_entity", {
         -- Allow the ball to be punched, but prevent default damage sounds by avoiding 'fleshy'
         self.object:set_armor_groups({punch_operable = 1})
 
-        -- Set random color if none is saved
+        -- Set random color and age if none is saved
+        self.age = 0
         if not self._color_idx then
             if staticdata and staticdata ~= "" then
-                self._color_idx = tonumber(staticdata)
+                -- Try deserializing as a table for backward compatibility
+                local data = minetest.deserialize(staticdata)
+                if type(data) == "table" then
+                    self._color_idx = data.color_idx
+                    self.age = data.age or 0
+                else
+                    self._color_idx = tonumber(staticdata)
+                end
             else
                 self._color_idx = math.random(1, #rainbow_colors)
             end
@@ -77,10 +85,16 @@ minetest.register_entity("mine_test_ball_pit:ball_entity", {
     end,
 
     get_staticdata = function(self)
-        return tostring(self._color_idx or 1)
+        return minetest.serialize({
+            color_idx = self._color_idx or 1,
+            age = self.age or 0
+        })
     end,
 
     on_step = function(self, dtime)
+        -- Update age
+        self.age = (self.age or 0) + dtime
+
         -- Simulate bounce
         local vel = self.object:get_velocity()
         if not vel then return end
@@ -97,7 +111,7 @@ minetest.register_entity("mine_test_ball_pit:ball_entity", {
         local bounced = false
         local restitution = 0.6 -- How bouncy they are
 
-        -- Player/Mob Repulsion (Diving Effect)
+        -- Player/Mob Repulsion (Diving Effect) and Ball spreading
         local objs = minetest.get_objects_inside_radius(pos, 1.5)
         if #objs > 15 then
             self.object:remove()
@@ -109,15 +123,24 @@ minetest.register_entity("mine_test_ball_pit:ball_entity", {
                 local lua_ent = obj:get_luaentity()
                 local is_player = obj:is_player()
                 local is_mob = lua_ent and lua_ent.name ~= "mine_test_ball_pit:ball_entity"
+                local is_ball = lua_ent and lua_ent.name == "mine_test_ball_pit:ball_entity"
 
-                if is_player or is_mob then
+                if is_player or is_mob or is_ball then
                     local opos = obj:get_pos()
                     if opos then
                         local dx = pos.x - opos.x
                         local dz = pos.z - opos.z
-                        -- Apply a small push away from the object
-                        new_vel.x = new_vel.x + dx * 2.0 * dtime
-                        new_vel.z = new_vel.z + dz * 2.0 * dtime
+
+                        -- If perfectly overlapping, push apart randomly
+                        if dx == 0 and dz == 0 then
+                            dx = (math.random() - 0.5) * 0.1
+                            dz = (math.random() - 0.5) * 0.1
+                        end
+
+                        -- Apply a push away from the object (smaller push for ball-on-ball)
+                        local force = (is_player or is_mob) and 2.0 or 0.5
+                        new_vel.x = new_vel.x + dx * force * dtime
+                        new_vel.z = new_vel.z + dz * force * dtime
                         bounced = true
                     end
                 end
@@ -167,7 +190,15 @@ minetest.register_entity("mine_test_ball_pit:ball_entity", {
         end
 
         if in_liquid then
-            self.object:set_acceleration({x = 0, y = 1.0, z = 0})
+            if self.age > 600 then
+                self.object:set_acceleration({x = 0, y = -1.0, z = 0})
+                if pos.y < -10 then
+                    self.object:remove()
+                    return
+                end
+            else
+                self.object:set_acceleration({x = 0, y = 1.0, z = 0})
+            end
             -- Dampening drag effect in water
             new_vel.x = new_vel.x * 0.9
             new_vel.y = new_vel.y * 0.9

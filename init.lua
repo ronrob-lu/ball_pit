@@ -137,11 +137,22 @@ minetest.register_entity("mine_test_ball_pit:ball_entity", {
                             dz = (math.random() - 0.5) * 0.1
                         end
 
-                        -- Apply a push away from the object (smaller push for ball-on-ball)
-                        local force = (is_player or is_mob) and 2.0 or 0.5
-                        new_vel.x = new_vel.x + dx * force * dtime
-                        new_vel.z = new_vel.z + dz * force * dtime
-                        bounced = true
+                        local dist = math.sqrt(dx * dx + dz * dz)
+                        if dist > 0 then
+                            -- Normalize direction vectors
+                            local nx = dx / dist
+                            local nz = dz / dist
+
+                            -- Push harder when closer (up to max radius 1.5)
+                            local push_strength = 1.5 - dist
+                            if push_strength > 0 then
+                                -- Apply a push away from the object (smaller push for ball-on-ball)
+                                local force = (is_player or is_mob) and 10.0 or 4.0
+                                new_vel.x = new_vel.x + nx * push_strength * force * dtime
+                                new_vel.z = new_vel.z + nz * push_strength * force * dtime
+                                bounced = true
+                            end
+                        end
                     end
                 end
             end

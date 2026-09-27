@@ -99,14 +99,19 @@ minetest.register_entity("mine_test_ball_pit:ball_entity", {
 
         -- Player/Mob Repulsion (Diving Effect)
         local objs = minetest.get_objects_inside_radius(pos, 1.5)
+        if #objs > 15 then
+            self.object:remove()
+            return
+        end
         for _, obj in ipairs(objs) do
             if obj ~= self.object then
                 -- Check if object is a player or a mob (basic entity that isn't a ball)
                 local lua_ent = obj:get_luaentity()
                 local is_player = obj:is_player()
                 local is_mob = lua_ent and lua_ent.name ~= "mine_test_ball_pit:ball_entity"
+                local is_ball = lua_ent and lua_ent.name == "mine_test_ball_pit:ball_entity"
 
-                if is_player or is_mob then
+                if is_player or is_mob or is_ball then
                     local opos = obj:get_pos()
                     if opos then
                         local dx = pos.x - opos.x
@@ -150,6 +155,10 @@ minetest.register_entity("mine_test_ball_pit:ball_entity", {
 
         -- Water Physics (Swimming/Floating)
         local node = minetest.get_node(pos)
+        if node and minetest.get_item_group(node.name, "lava") > 0 then
+            self.object:remove()
+            return
+        end
         local in_liquid = false
         if node and minetest.registered_nodes[node.name] then
             local def = minetest.registered_nodes[node.name]
